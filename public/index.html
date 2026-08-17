@@ -1,0 +1,832 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Renewal Management Dashboard</title>
+
+<!-- Google Fonts -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+<!-- Chart.js -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+<style>
+  :root {
+    /* Soft Warm Light Theme (Between White and Solarized) */
+    --bg-main: #fcfbf8;
+    --card-bg: #f6f4ed;
+    --border-color: #d8d4c7;
+    --text-main: #475569;
+    --text-muted: #64748b;
+    --primary: #1e293b;
+    --accent: #3b82f6;
+    
+    --success: #65a30d;
+    --success-bg: #ecfccb;
+    --warning: #d97706;
+    --warning-bg: #fef3c7;
+    --danger: #dc2626;
+    --danger-bg: #fee2e2;
+    --info: #0284c7;
+    --info-bg: #e0f2fe;
+    
+    --shadow-sm: 0 1px 2px rgba(0,0,0,0.05);
+    --shadow-md: 0 4px 6px -1px rgba(0,0,0,0.1);
+    --radius-md: 4px;
+    --radius-lg: 8px;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: 'Inter', sans-serif;
+    color: var(--text-main);
+    background: var(--bg-main);
+    font-size: 13px;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .app-container { display: flex; flex-direction: column; min-height: 100vh; }
+
+  .header {
+    background: var(--card-bg);
+    border-bottom: 1px solid var(--border-color);
+    padding: 16px 32px 0 32px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    position: sticky;
+    top: 0;
+    z-index: 10;
+  }
+  
+  .header-top { display: flex; justify-content: space-between; align-items: center; }
+
+  .header-left .title { font-size: 20px; font-weight: 700; color: var(--primary); letter-spacing: -0.5px; }
+  .header-left .subtitle { font-size: 12px; color: var(--text-muted); margin-top: 2px; }
+
+  .tabs {
+    display: flex;
+    gap: 24px;
+  }
+  
+  .tab {
+    padding: 8px 0 12px 0;
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-muted);
+    cursor: pointer;
+    border-bottom: 3px solid transparent;
+    transition: all 0.2s;
+  }
+  
+  .tab:hover { color: var(--primary); }
+  .tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+
+  .main-content { padding: 24px 32px; flex: 1; display: flex; flex-direction: column; gap: 24px; }
+
+  .tab-content { display: none; flex-direction: column; gap: 24px; }
+  .tab-content.active { display: flex; }
+
+  .card {
+    background: var(--card-bg);
+    border-radius: var(--radius-lg);
+    border: 1px solid var(--border-color);
+    box-shadow: var(--shadow-sm);
+    overflow: hidden;
+  }
+
+  .card-header {
+    padding: 16px 20px;
+    border-bottom: 1px solid var(--border-color);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+
+  .card-title { font-size: 14px; font-weight: 600; color: var(--primary); text-transform: uppercase; }
+  .card-note { font-size: 11px; color: var(--text-muted); }
+
+  .kpi-grid { display: grid; grid-template-columns: repeat(6, 1fr); gap: 16px; }
+
+  .kpi-card {
+    padding: 20px; display: flex; flex-direction: column; gap: 8px;
+    border-top: 4px solid var(--accent); border-left: none;
+    background: var(--card-bg); transition: transform 0.2s, border-color 0.2s; position: relative;
+    cursor: pointer;
+  }
+  .kpi-card:hover { transform: translateY(-4px); }
+
+  .kpi-card.delayed { border-top-color: var(--danger); }
+  .kpi-card.due { border-top-color: var(--warning); }
+  .kpi-card.kam { border-top-color: var(--info); }
+  .kpi-card.tcv { border-top-color: var(--success); }
+  .kpi-card.revenue { border-top-color: #6c71c4; }
+
+  .kpi-icon { position: absolute; top: 20px; right: 20px; opacity: 0.15; color: inherit; }
+  .kpi-label { font-size: 11px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; }
+  .kpi-value { font-size: 28px; font-weight: 700; color: var(--primary); line-height: 1; }
+
+  .charts-grid { display: grid; grid-template-columns: 1fr 2fr 1fr; gap: 24px; }
+  .chart-container { padding: 20px; height: 300px; position: relative; }
+
+  .filters-grid {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)) 100px; gap: 16px;
+    padding: 20px; background: var(--bg-main); border-bottom: 1px solid var(--border-color);
+  }
+
+  .filter-group { display: flex; flex-direction: column; gap: 6px; }
+  .filter-group label { font-size: 11px; font-weight: 600; color: var(--text-main); }
+
+  select, input, button {
+    height: 36px; border: 1px solid var(--border-color); border-radius: var(--radius-md);
+    padding: 0 12px; font-family: inherit; font-size: 13px; background: var(--card-bg); color: var(--primary);
+    transition: border-color 0.2s, box-shadow 0.2s;
+  }
+
+  select:focus, input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px rgba(38, 139, 210, 0.2); }
+
+  button { background: var(--accent); color: #fdf6e3; border: none; font-weight: 600; cursor: pointer; display: flex; align-items: center; justify-content: center; margin-top: auto; }
+  button:hover { background: #2aa198; }
+  button.btn-outline { background: transparent; border: 1px solid var(--border-color); color: var(--text-main); }
+  button.btn-outline:hover { background: var(--bg-main); }
+
+  .table-container { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; text-align: left; }
+  th { background: #eee8d5; padding: 10px; font-size: 12px; font-weight: 700; color: var(--primary); text-transform: uppercase; border-bottom: 2px solid var(--border-color); cursor: pointer; user-select: none; }
+  th:hover { background: #e0d8c0; }
+  td { padding: 10px; border-bottom: 1px solid var(--border-color); font-size: 11px; }
+  tbody tr { transition: background-color 0.15s; }
+  tbody tr:hover { background-color: #fdf6e3; }
+
+  .badge { display: inline-flex; align-items: center; padding: 4px 8px; border-radius: var(--radius-md); font-size: 11px; font-weight: 600; line-height: 1; white-space: nowrap; background: transparent; border: 1px solid; }
+  .badge.delayed { color: var(--danger); border-color: rgba(220, 38, 38, 0.3); }
+  .badge.due { color: var(--warning); border-color: rgba(217, 119, 6, 0.3); }
+  .badge.kam { color: var(--info); border-color: rgba(2, 132, 199, 0.3); }
+  .badge.commit { color: var(--success); border-color: rgba(101, 163, 13, 0.3); }
+  .badge.default { color: var(--text-muted); border-color: var(--border-color); }
+  .money { text-align: right; font-variant-numeric: tabular-nums; font-weight: 600; }
+  
+  .region-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 16px; padding: 20px; }
+  .region-card { background: var(--card-bg); border: 1px solid var(--border-color); border-radius: var(--radius-lg); padding: 16px; cursor: pointer; transition: transform 0.2s, box-shadow 0.2s; }
+  .region-card:hover { transform: translateY(-4px); box-shadow: var(--shadow-md); border-color: var(--accent); }
+  .region-card-title { font-size: 16px; font-weight: 700; color: var(--primary); margin-bottom: 12px; }
+  .region-card-stat { display: flex; justify-content: space-between; font-size: 12px; margin-bottom: 8px; }
+  .region-card-stat span:last-child { font-weight: 600; color: var(--primary); }
+
+  .empty-state { padding: 48px; text-align: center; color: var(--text-muted); display: flex; flex-direction: column; align-items: center; gap: 12px; }
+
+  .footer { padding: 16px 32px; text-align: center; font-size: 11px; color: var(--text-muted); border-top: 1px solid var(--border-color); background: var(--card-bg); }
+
+  @media (max-width: 1024px) { .kpi-grid { grid-template-columns: repeat(3, 1fr); } .charts-grid { grid-template-columns: 1fr; } }
+  @media (max-width: 768px) { .kpi-grid { grid-template-columns: repeat(2, 1fr); } .filters-grid { grid-template-columns: 1fr 1fr; } }
+
+  /* Contacts Section */
+  .contacts-section { padding: 24px; background: var(--card-bg); border: 1px solid var(--border-color); border-radius: var(--radius-lg); margin-top: 24px; }
+  .contacts-header { display: flex; align-items: center; gap: 12px; margin-bottom: 24px; }
+  .contacts-title { font-size: 14px; font-weight: 700; color: var(--primary); text-transform: uppercase; }
+  .contacts-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 16px; }
+  .contact-card { background: var(--bg-main); border: 1px solid var(--border-color); border-radius: var(--radius-md); padding: 16px; display: flex; flex-direction: column; gap: 16px; }
+  .contact-card-header { display: flex; justify-content: space-between; align-items: center; }
+  .contact-category { font-size: 13px; font-weight: 700; color: var(--primary); text-transform: uppercase; }
+  .contact-count-badge { background: var(--info-bg); color: var(--info); font-size: 10px; font-weight: 600; padding: 2px 8px; border-radius: 12px; }
+  .contact-empty-text { font-size: 12px; color: var(--text-muted); font-style: italic; }
+  .btn-add-contact { background: transparent; border: 1px dashed var(--accent); color: var(--accent); border-radius: var(--radius-md); padding: 8px; font-size: 12px; font-weight: 600; cursor: pointer; text-align: center; transition: all 0.2s; width: 100%; }
+  .btn-add-contact:hover { background: var(--info-bg); border-style: solid; }
+  .contact-form { display: none; flex-direction: column; gap: 12px; background: var(--bg-main); padding: 12px; border-radius: var(--radius-md); border: 1px solid var(--border-color); }
+  .form-row { display: flex; gap: 12px; }
+  .form-group { display: flex; flex-direction: column; gap: 4px; flex: 1; }
+  .form-group label { font-size: 10px; font-weight: 600; color: var(--text-muted); }
+  .form-group input, .form-group select { height: 28px; padding: 0 8px; font-size: 11px; border: 1px solid var(--border-color); border-radius: 4px; background: #ffffff; color: #000; }
+  .form-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 4px; }
+  .btn-sm { padding: 6px 12px; font-size: 11px; font-weight: 600; border-radius: 4px; cursor: pointer; border: none; }
+  .btn-cancel { background: transparent; border: 1px solid var(--border-color); color: var(--text-main); }
+  .btn-save { background: var(--accent); color: #fdf6e3; }
+  .contact-list { display: flex; flex-direction: column; gap: 8px; }
+  .contact-item { background: #ffffff; border: 1px solid var(--border-color); border-radius: var(--radius-md); padding: 10px; display: flex; flex-direction: column; gap: 4px; }
+  .ci-header { display: flex; justify-content: space-between; align-items: flex-start; }
+  .btn-delete { background: transparent; border: none; color: var(--text-muted); cursor: pointer; padding: 2px; border-radius: 4px; display: flex; align-items: center; justify-content: center; }
+  .btn-delete:hover { background: var(--danger-bg); color: var(--danger); }
+  .ci-name { font-weight: 600; color: #000; font-size: 12px; }
+  .ci-position { font-size: 10px; color: var(--text-muted); }
+  .ci-detail { font-size: 11px; color: #000; display: flex; align-items: center; gap: 4px; }
+</style>
+</head>
+<body>
+
+<div class="app-container">
+  
+  <!-- Header -->
+  <header class="header">
+    <div class="header-top">
+      <div class="header-left">
+        <h1 class="title">RENEWAL MANAGEMENT DASHBOARD</h1>
+      </div>
+    </div>
+    <div class="tabs">
+      <div class="tab active" onclick="switchTab('dashboard', this)">Dashboard Overview</div>
+      <div class="tab" onclick="switchTab('details', this)">Opportunity Details</div>
+      <div class="tab" onclick="switchTab('region-summary', this)">Region Wise Summary</div>
+      <div class="tab" onclick="switchTab('contacts-tab', this)">Customer Contacts</div>
+    </div>
+  </header>
+
+  <!-- Main Content -->
+  <main class="main-content">
+
+    <!-- Dashboard Tab -->
+    <div id="dashboard" class="tab-content active">
+      <div class="kpi-grid">
+        <div class="card kpi-card" onclick="goToDetails(null, null)">
+          <div class="kpi-label">Total Opportunities</div>
+          <div class="kpi-value" id="total">—</div>
+        </div>
+        <div class="card kpi-card delayed" onclick="goToDetails('group', 'Delayed Renewal')">
+          <div class="kpi-label">Delayed Renewals</div>
+          <div class="kpi-value" id="delayed">—</div>
+        </div>
+        <div class="card kpi-card due" onclick="goToDetails('group', 'Renewal Due / Expiry')">
+          <div class="kpi-label">Renewal Due / Expiry</div>
+          <div class="kpi-value" id="due">—</div>
+        </div>
+        <div class="card kpi-card kam" onclick="goToDetails('group', 'KAM Comments')">
+          <div class="kpi-label">KAM Responses</div>
+          <div class="kpi-value" id="kam">—</div>
+        </div>
+        <div class="card kpi-card tcv">
+          <div class="kpi-label">Total TCV</div>
+          <div class="kpi-value" id="tcv">—</div>
+        </div>
+        <div class="card kpi-card revenue">
+          <div class="kpi-label">2026 Revenue Est.</div>
+          <div class="kpi-value" id="revenue">—</div>
+        </div>
+      </div>
+
+      <div class="charts-grid">
+        <div class="card">
+          <div class="card-header"><div class="card-title">Opportunities by Group</div></div>
+          <div class="chart-container"><canvas id="doughnutChart"></canvas></div>
+        </div>
+        <div class="card">
+          <div class="card-header"><div class="card-title">TCV & ACV by Forecast Category</div></div>
+          <div class="chart-container"><canvas id="barChart"></canvas></div>
+        </div>
+        <div class="card">
+          <div class="card-header"><div class="card-title">Opportunities by Region</div></div>
+          <div class="chart-container"><canvas id="regionChart"></canvas></div>
+        </div>
+      </div>
+
+      <!-- Annual Summary Section -->
+      <div class="card" style="margin-top: 24px;">
+        <div class="card-header">
+          <div class="card-title">Annual Summary</div>
+        </div>
+        <div style="padding: 20px;">
+           <div id="annualView" class="region-grid" style="padding: 0;"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Customer Contacts Tab -->
+    <div id="contacts-tab" class="tab-content">
+      <div class="contacts-section" style="margin-top: 0;">
+        <div class="contacts-header">
+          <div class="contacts-title">Customer Contacts Section</div>
+        </div>
+        <div class="contacts-grid" id="contactsGrid"></div>
+      </div>
+    </div>
+
+    <!-- Details Tab -->
+    <div id="details" class="tab-content">
+      <div class="card">
+        <div class="card-header" style="border-bottom: none;">
+          <div class="card-title">Opportunity Details</div>
+          <div class="card-note" id="rowCount">0 records</div>
+        </div>
+        
+        <div class="filters-grid">
+          <div class="filter-group"><label>Region</label><select id="region"></select></div>
+          <div class="filter-group"><label>Group</label><select id="group"></select></div>
+          <div class="filter-group"><label>Category</label><select id="category"></select></div>
+          <div class="filter-group"><label>Forecast</label><select id="forecast"></select></div>
+          <div class="filter-group"><label>Timeline</label><select id="timeline"></select></div>
+          <div class="filter-group" style="flex: 2;"><label>Search</label><input id="search" placeholder="Search opportunities..."></div>
+          <div class="filter-group"><label>&nbsp;</label><button id="clear" class="btn-outline">Clear</button></div>
+        </div>
+
+        <div class="table-container">
+          <table>
+            <thead id="thead"></thead>
+            <tbody id="tbody"></tbody>
+          </table>
+          <div class="empty-state" id="empty" style="display:none"><div>No records match the selected filters.</div></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Region Summary Tab -->
+    <div id="region-summary" class="tab-content">
+      <div class="card">
+        <div class="card-header"><div class="card-title">Region Wise Summary</div></div>
+        <div class="region-grid" id="regionGrid"></div>
+      </div>
+    </div>
+
+  </main>
+
+</div>
+
+<script>
+const C = {
+  opp: "Opportunity Name", response: "Last Received Response from KAM",
+  region: "Sub-Region", group: "Group", category: "Category",
+  forecast: "Forecast Category", timeline: "Renewal Timeline",
+  start: "Service Start Date", end: "Service End Date",
+  acv: "Forecast ACV Amount", tcv: "TCV Amount",
+  revenue: "2026 Revenue Estimate till Sep 2026, Including Catchup if any"
+};
+const columns = [C.opp, C.response, C.region, C.group, C.category, C.forecast, C.timeline, C.start, C.end, C.acv, C.tcv, C.revenue];
+
+let allRows = [];
+let rows = [];
+let sortColumn = null;
+let sortDirection = 1;
+let isFiltering = false;
+
+let barChartInstance = null; let doughnutChartInstance = null; let regionChartInstance = null;
+const $ = id => document.getElementById(id);
+const esc = value => String(value ?? "").replace(/[&<>"']/g, ch => ({"&": "&amp;","<": "&lt;",">": "&gt;",'"': "&quot;","'": "&#39;"}[ch]));
+const money = value => Number(value || 0).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const moneyMillion = value => (Number(value || 0) / 1000000).toFixed(2) + "M";
+
+// Tab Switching
+function switchTab(tabId, el) {
+  document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+  $(tabId).classList.add('active');
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  if (el) el.classList.add('active');
+  else {
+    if (tabId === 'dashboard') document.querySelectorAll('.tab')[0].classList.add('active');
+    if (tabId === 'details') document.querySelectorAll('.tab')[1].classList.add('active');
+    if (tabId === 'region-summary') document.querySelectorAll('.tab')[2].classList.add('active');
+    if (tabId === 'contacts-tab') document.querySelectorAll('.tab')[3].classList.add('active');
+  }
+}
+
+function goToDetails(filterId, filterValue) {
+  switchTab('details');
+  if (filterId === null) {
+    clearAllFilters();
+  } else {
+    $(filterId).value = filterValue;
+    applyFilters();
+  }
+}
+
+function groupBadge(value) {
+  let cls = "default";
+  if (value === "Delayed Renewal") cls = "delayed";
+  else if (value === "Renewal Due / Expiry") cls = "due";
+  else if (value === "KAM Comments") cls = "kam";
+  return `<span class="badge ${cls}">${esc(value)}</span>`;
+}
+
+function forecastBadge(value) {
+  let cls = "default";
+  if (value === "Commit") cls = "commit";
+  return `<span class="badge ${cls}">${esc(value)}</span>`;
+}
+
+function clearAllFilters() {
+  ["region", "group", "category", "forecast", "timeline", "search"].forEach(id => $(id).value = "");
+  sortColumn = null; sortDirection = 1;
+  applyFilters();
+}
+
+function applyFilters() {
+  if (isFiltering) return;
+  isFiltering = true;
+
+  const filters = {
+    region: $("region").value, group: $("group").value, category: $("category").value,
+    forecast: $("forecast").value, timeline: $("timeline").value
+  };
+  const q = $("search").value.trim().toLowerCase();
+
+  rows = allRows.filter(r => {
+    if (filters.region && r[C.region] !== filters.region) return false;
+    if (filters.group && r[C.group] !== filters.group) return false;
+    if (filters.category && r[C.category] !== filters.category) return false;
+    if (filters.forecast && r[C.forecast] !== filters.forecast) return false;
+    if (filters.timeline && r[C.timeline] !== filters.timeline) return false;
+    if (q && !Object.values(r).join(" ").toLowerCase().includes(q)) return false;
+    return true;
+  });
+
+  // Cascading update
+  ["region", "group", "category", "forecast", "timeline"].forEach(id => {
+    const field = {region: C.region, group: C.group, category: C.category, forecast: C.forecast, timeline: C.timeline}[id];
+    const select = $(id);
+    const currentVal = filters[id];
+    
+    const validRows = allRows.filter(r => {
+      return ["region", "group", "category", "forecast", "timeline"].every(otherId => {
+        if (otherId === id) return true; 
+        const v = filters[otherId];
+        if (!v) return true;
+        const otherField = {region: C.region, group: C.group, category: C.category, forecast: C.forecast, timeline: C.timeline}[otherId];
+        return r[otherField] === v;
+      });
+    });
+    
+    const validValues = [...new Set(validRows.map(r => r[field]).filter(Boolean))].sort((a, b) => String(a).localeCompare(String(b)));
+    select.innerHTML = `<option value="">All</option>` + validValues.map(v => `<option value="${esc(v)}">${esc(v)}</option>`).join("");
+    if (validValues.includes(currentVal)) { select.value = currentVal; } 
+    else { select.value = ""; filters[id] = ""; }
+  });
+
+  rows = allRows.filter(r => {
+    if (filters.region && r[C.region] !== filters.region) return false;
+    if (filters.group && r[C.group] !== filters.group) return false;
+    if (filters.category && r[C.category] !== filters.category) return false;
+    if (filters.forecast && r[C.forecast] !== filters.forecast) return false;
+    if (filters.timeline && r[C.timeline] !== filters.timeline) return false;
+    if (q && !Object.values(r).join(" ").toLowerCase().includes(q)) return false;
+    return true;
+  });
+
+  if (sortColumn) rows.sort((a, b) => compare(a[sortColumn], b[sortColumn]) * sortDirection);
+  
+  render();
+  isFiltering = false;
+}
+
+function compare(a, b) {
+  const na = Number(a); const nb = Number(b);
+  if (!Number.isNaN(na) && !Number.isNaN(nb)) return na - nb;
+  return String(a ?? "").localeCompare(String(b ?? ""));
+}
+
+function updateKpis() {
+  $("total").textContent = rows.length;
+  $("delayed").textContent = rows.filter(r => r[C.group] === "Delayed Renewal").length;
+  $("due").textContent = rows.filter(r => r[C.group] === "Renewal Due / Expiry").length;
+  $("kam").textContent = rows.filter(r => r[C.group] === "KAM Comments").length;
+  $("tcv").textContent = moneyMillion(rows.reduce((t, r) => t + (Number(r[C.tcv]) || 0), 0));
+  $("revenue").textContent = moneyMillion(rows.reduce((t, r) => t + (Number(r[C.revenue]) || 0), 0));
+  $("rowCount").textContent = `${rows.length} record${rows.length === 1 ? "" : "s"}`;
+}
+
+function renderTable() {
+  const isKamFiltered = $("group").value === "KAM Comments";
+  const displayColumns = columns.filter(col => !(isKamFiltered && col === C.group));
+
+  $("thead").innerHTML = `<tr>` + displayColumns.map(col => {
+    const marker = sortColumn === col ? (sortDirection === 1 ? " &uarr;" : " &darr;") : "";
+    return `<th data-column="${esc(col)}">${esc(col)} ${marker}</th>`;
+  }).join("") + `</tr>`;
+
+  document.querySelectorAll("th").forEach(th => {
+    th.onclick = () => {
+      const col = th.dataset.column;
+      if (sortColumn === col) sortDirection *= -1;
+      else { sortColumn = col; sortDirection = 1; }
+      applyFilters();
+    };
+  });
+
+  $("tbody").innerHTML = rows.map(r => `
+    <tr>
+      <td><strong>${esc(r[C.opp])}</strong></td>
+      <td><div style="max-width: 150px; white-space: normal; overflow: hidden;" title="${esc(r[C.response] || "")}">${esc(r[C.response] || "—")}</div></td>
+      <td>${esc(r[C.region])}</td>
+      ${isKamFiltered ? '' : `<td>${groupBadge(r[C.group])}</td>`}
+      <td>${esc(r[C.category])}</td>
+      <td>${forecastBadge(r[C.forecast])}</td>
+      <td>${esc(r[C.timeline])}</td>
+      <td>${esc(r[C.start])}</td>
+      <td>${esc(r[C.end])}</td>
+      <td class="money">${money(r[C.acv])}</td>
+      <td class="money">${money(r[C.tcv])}</td>
+      <td class="money">${money(r[C.revenue])}</td>
+    </tr>
+  `).join("");
+  $("empty").style.display = rows.length ? "none" : "flex";
+}
+
+function renderCharts() {
+  const colors = {
+    blue: '#268bd2', cyan: '#2aa198', green: '#859900', yellow: '#b58900',
+    orange: '#cb4b16', red: '#dc322f', magenta: '#d33682', violet: '#6c71c4'
+  };
+
+  const fMap = {}; rows.forEach(r => { const f = r[C.forecast] || "Uncategorized"; if (!fMap[f]) fMap[f] = { tcv: 0, acv: 0 }; fMap[f].tcv += (Number(r[C.tcv]) || 0); fMap[f].acv += (Number(r[C.acv]) || 0); });
+  const order = ["Commit", "Best Case", "Pipeline"];
+  const fLabels = Object.keys(fMap).sort((a, b) => {
+    let ia = order.indexOf(a); let ib = order.indexOf(b);
+    return (ia === -1 ? 999 : ia) - (ib === -1 ? 999 : ib);
+  });
+  
+  if (barChartInstance) barChartInstance.destroy();
+  barChartInstance = new Chart($('barChart').getContext('2d'), {
+    type: 'bar',
+    data: {
+      labels: fLabels,
+      datasets: [
+        { label: 'TCV', data: fLabels.map(l => fMap[l].tcv), backgroundColor: colors.blue },
+        { label: 'ACV', data: fLabels.map(l => fMap[l].acv), backgroundColor: colors.cyan }
+      ]
+    },
+    options: { responsive: true, maintainAspectRatio: false }
+  });
+
+  const gMap = {}; rows.forEach(r => { const g = r[C.group] || "Other"; gMap[g] = (gMap[g] || 0) + 1; });
+  const gLabels = Object.keys(gMap);
+  
+  if (doughnutChartInstance) doughnutChartInstance.destroy();
+  doughnutChartInstance = new Chart($('doughnutChart').getContext('2d'), {
+    type: 'doughnut',
+    data: {
+      labels: gLabels,
+      datasets: [{ data: gLabels.map(l => gMap[l]), backgroundColor: [colors.red, colors.yellow, colors.cyan, colors.green, colors.violet], borderWidth: 0 }]
+    },
+    options: { responsive: true, maintainAspectRatio: false, cutout: '70%' }
+  });
+
+  const rMap = {}; rows.forEach(r => { const reg = r[C.region] || "Other"; rMap[reg] = (rMap[reg] || 0) + 1; });
+  const sortedRegions = Object.keys(rMap).sort((a, b) => rMap[b] - rMap[a]);
+  
+  if (regionChartInstance) regionChartInstance.destroy();
+  regionChartInstance = new Chart($('regionChart').getContext('2d'), {
+    type: 'bar',
+    data: {
+      labels: sortedRegions,
+      datasets: [{
+        label: 'Opportunities',
+        data: sortedRegions.map(l => rMap[l]),
+        backgroundColor: [colors.blue, colors.green, colors.yellow, colors.orange, colors.red, colors.violet],
+        borderRadius: 8,
+        borderSkipped: false,
+        maxBarThickness: 36
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: {
+        x: { grid: { display: false }, border: { display: false } },
+        y: { beginAtZero: true, grid: { color: 'rgba(0,0,0,0.04)', tickLength: 0 }, border: { display: false } }
+      }
+    }
+  });
+}
+
+function renderRegionSummary() {
+  const rMap = {};
+  allRows.forEach(r => {
+    const reg = r[C.region] || "Other";
+    if (!rMap[reg]) rMap[reg] = { count: 0, tcv: 0, rev: 0 };
+    rMap[reg].count += 1;
+    rMap[reg].tcv += (Number(r[C.tcv]) || 0);
+    rMap[reg].rev += (Number(r[C.revenue]) || 0);
+  });
+  
+  const regions = Object.keys(rMap).sort();
+  $("regionGrid").innerHTML = regions.map(reg => `
+    <div class="region-card" onclick="goToDetails('region', '${esc(reg)}')">
+      <div class="region-card-title">${esc(reg)}</div>
+      <div class="region-card-stat"><span>Opportunities</span> <span>${rMap[reg].count}</span></div>
+      <div class="region-card-stat"><span>Total TCV</span> <span>${moneyMillion(rMap[reg].tcv)}</span></div>
+      <div class="region-card-stat"><span>2026 Rev Est</span> <span>${moneyMillion(rMap[reg].rev)}</span></div>
+    </div>
+  `).join("");
+}
+
+function renderAnnualSummary() {
+  const yMap = {};
+  
+  allRows.forEach(r => {
+    let dateStr = r[C.end];
+    if (!dateStr) return;
+    let d = new Date(dateStr);
+    if (isNaN(d.getTime())) return;
+    
+    let year = d.getFullYear();
+    
+    if (!yMap[year]) yMap[year] = { count: 0, tcv: 0, rev: 0 };
+    
+    yMap[year].count += 1;
+    yMap[year].tcv += (Number(r[C.tcv]) || 0);
+    yMap[year].rev += (Number(r[C.revenue]) || 0);
+  });
+  
+  const years = Object.keys(yMap).sort();
+  $("annualView").innerHTML = years.map(y => `
+    <div class="region-card">
+      <div class="region-card-title">${y}</div>
+      <div class="region-card-stat"><span>Opportunities</span> <span>${yMap[y].count}</span></div>
+      <div class="region-card-stat"><span>Total TCV</span> <span>${moneyMillion(yMap[y].tcv)}</span></div>
+      <div class="region-card-stat"><span>2026 Rev Est</span> <span>${moneyMillion(yMap[y].rev)}</span></div>
+    </div>
+  `).join("");
+}
+
+function render() {
+  updateKpis();
+  renderTable();
+  renderCharts();
+  renderRegionSummary();
+  renderAnnualSummary();
+}
+
+async function loadExcelData() {
+  try {
+    const response = await fetch("/api/data", { cache: "no-store" });
+    const result = await response.json();
+    if (!response.ok || !result.success) throw new Error(result.message || "Unable to load Excel data");
+    allRows = result.rows;
+    allRows.forEach(r => { if (r[C.group] === "KAM Comments / Response") r[C.group] = "KAM Comments"; });
+    applyFilters();
+  } catch (error) {
+    console.error(error);
+  }
+}
+
+["region", "group", "category", "forecast", "timeline"].forEach(id => $(id).addEventListener("change", applyFilters));
+$("search").addEventListener("input", applyFilters);
+$("clear").onclick = clearAllFilters;
+
+/* Customer Contacts Logic */
+let savedContacts = JSON.parse(localStorage.getItem('customerContacts')) || {};
+let activeFormCategory = null;
+let editingCategory = null;
+let editingIndex = null;
+
+const CONTACT_CATEGORIES = ['ROAMING', 'SIGNALING', 'NETWORK SECURITY', 'CUSTOMER INTELLIGENCE'];
+
+function renderContacts() {
+  const country = "India";
+  const grid = document.getElementById("contactsGrid");
+  
+  if (!savedContacts[country]) {
+    savedContacts[country] = {
+      'ROAMING': [], 'SIGNALING': [], 'NETWORK SECURITY': [], 'CUSTOMER INTELLIGENCE': []
+    };
+  }
+
+  let html = '';
+  CONTACT_CATEGORIES.forEach(cat => {
+    const contacts = savedContacts[country][cat] || [];
+    const count = contacts.length;
+    
+    html += `
+      <div class="contact-card">
+        <div class="contact-card-header">
+          <div class="contact-category">${cat}</div>
+          <div class="contact-count-badge">${count} Contact${count !== 1 ? 's' : ''}</div>
+        </div>
+    `;
+
+    if (count === 0) {
+      html += `<div class="contact-empty-text" id="empty-${cat}">No contacts added yet.</div>`;
+    } else {
+      html += `<div class="contact-list">`;
+      contacts.forEach((c, index) => {
+        html += `
+          <div class="contact-item">
+            <div class="ci-header">
+              <div>
+                <div class="ci-name">${esc(c.name)}</div>
+                <div class="ci-position">${esc(c.position)}</div>
+              </div>
+              <div style="display:flex; gap:4px;">
+                <button class="btn-delete" onclick="editContact('${cat}', ${index})" title="Edit Contact">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"></path></svg>
+                </button>
+                <button class="btn-delete" onclick="deleteContact('${cat}', ${index})" title="Delete Contact">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>
+                </button>
+              </div>
+            </div>
+            <div class="ci-detail"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path><polyline points="22,6 12,13 2,6"></polyline></svg> ${esc(c.email)}</div>
+            ${c.phone ? `<div class="ci-detail"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"></path></svg> ${esc(c.phone)}</div>` : ''}
+          </div>
+        `;
+      });
+      html += `</div>`;
+    }
+
+    if (activeFormCategory === cat) {
+      html += `
+        <div class="contact-form" style="display:flex;">
+          <div class="form-row">
+            <div class="form-group"><label>Contact Name *</label><input id="cName" type="text" placeholder="e.g. John Doe"></div>
+            <div class="form-group"><label>Position</label><input id="cPos" type="text" placeholder="e.g. VP Operations"></div>
+          </div>
+          <div class="form-row">
+            <div class="form-group"><label>Email ID *</label><input id="cEmail" type="email" placeholder="john@operator.com"></div>
+            <div class="form-group"><label>Mobile Number</label><input id="cPhone" type="tel" placeholder="+966 50 123 4567"></div>
+          </div>
+          <div class="form-group">
+            <label>Decision Authority</label>
+            <select id="cAuth">
+              <option>No</option><option>Yes</option><option>Unknown</option>
+            </select>
+          </div>
+          <div class="form-actions">
+            <button class="btn-sm btn-cancel" onclick="toggleForm(null)">Cancel</button>
+            <button class="btn-sm btn-save" onclick="saveContact('${cat}')">Save</button>
+          </div>
+        </div>
+      `;
+    } else {
+      html += `<button class="btn-add-contact" onclick="toggleForm('${cat}')">+ Add Contact</button>`;
+    }
+    
+    html += `</div>`;
+  });
+
+  grid.innerHTML = html;
+}
+
+function toggleForm(category) {
+  activeFormCategory = category;
+  editingCategory = null;
+  editingIndex = null;
+  renderContacts();
+}
+
+function saveContact(category) {
+  const name = $('cName').value.trim();
+  const email = $('cEmail').value.trim();
+  if (!name || !email) {
+    alert("Name and Email are required");
+    return;
+  }
+
+  const contact = {
+    name,
+    email,
+    position: $('cPos').value.trim(),
+    phone: $('cPhone').value.trim(),
+    auth: $('cAuth').value
+  };
+
+  const country = "India";
+  if (!savedContacts[country]) savedContacts[country] = {};
+  if (!savedContacts[country][category]) savedContacts[country][category] = [];
+
+  if (editingCategory === category && editingIndex !== null) {
+    savedContacts[country][category][editingIndex] = contact;
+  } else {
+    savedContacts[country][category].push(contact);
+  }
+
+  localStorage.setItem('customerContacts', JSON.stringify(savedContacts));
+  activeFormCategory = null;
+  renderContacts();
+}
+
+function editContact(category, index) {
+  activeFormCategory = category;
+  editingCategory = category;
+  editingIndex = index;
+  renderContacts();
+  
+  // Need to populate the form in the next tick
+  setTimeout(() => {
+    const contact = savedContacts["India"][category][index];
+    if(contact) {
+      $('cName').value = contact.name || '';
+      $('cEmail').value = contact.email || '';
+      $('cPos').value = contact.position || '';
+      $('cPhone').value = contact.phone || '';
+      $('cAuth').value = contact.auth || 'No';
+    }
+  }, 0);
+}
+
+function deleteContact(category, index) {
+  if(confirm("Are you sure you want to delete this contact?")) {
+    savedContacts["India"][category].splice(index, 1);
+    localStorage.setItem('customerContacts', JSON.stringify(savedContacts));
+    renderContacts();
+  }
+}
+
+// Ensure contacts are rendered initially
+renderContacts();
+
+setInterval(loadExcelData, 60 * 1000);
+loadExcelData();
+</script>
+</body>
+</html>
