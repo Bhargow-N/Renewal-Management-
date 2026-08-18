@@ -503,6 +503,13 @@ function clearAllFilters() {
   applyFilters();
 }
 
+function hasKamComment(r) {
+  const v = r[C.response];
+  if (!v) return false;
+  const str = String(v).trim().toLowerCase();
+  return str !== "" && str !== "-" && str !== "—" && str !== "null" && str !== "na" && str !== "n/a";
+}
+
 function applyFilters() {
   if (isFiltering) return;
   isFiltering = true;
@@ -515,7 +522,15 @@ function applyFilters() {
 
   rows = allRows.filter(r => {
     if (filters.region && r[C.region] !== filters.region) return false;
-    if (filters.group && r[C.group] !== filters.group) return false;
+    
+    if (filters.group) {
+      if (filters.group === "KAM Comments") {
+        if (!hasKamComment(r)) return false;
+      } else {
+        if (r[C.group] !== filters.group) return false;
+      }
+    }
+    
     if (filters.category && r[C.category] !== filters.category) return false;
     if (filters.forecast && r[C.forecast] !== filters.forecast) return false;
     if (filters.timeline && r[C.timeline] !== filters.timeline) return false;
@@ -534,20 +549,45 @@ function applyFilters() {
         if (otherId === id) return true; 
         const v = filters[otherId];
         if (!v) return true;
+        
+        if (otherId === "group" && v === "KAM Comments") {
+          return hasKamComment(r);
+        }
+        
         const otherField = {region: C.region, group: C.group, category: C.category, forecast: C.forecast, timeline: C.timeline}[otherId];
         return r[otherField] === v;
       });
     });
     
-    const validValues = [...new Set(validRows.map(r => r[field]).filter(Boolean))].sort((a, b) => String(a).localeCompare(String(b)));
+    let validValues = [...new Set(validRows.map(r => r[field]).filter(Boolean))].sort((a, b) => String(a).localeCompare(String(b)));
+    
+    // Always ensure "KAM Comments" is an option in the Group dropdown
+    if (id === "group") {
+      validValues = validValues.filter(v => v !== "KAM Comments" && v !== "KAM Comments / Response");
+      validValues.unshift("KAM Comments"); 
+    }
+    
     select.innerHTML = `<option value="">All</option>` + validValues.map(v => `<option value="${esc(v)}">${esc(v)}</option>`).join("");
-    if (validValues.includes(currentVal)) { select.value = currentVal; } 
-    else { select.value = ""; filters[id] = ""; }
+    if (validValues.includes(currentVal) || (id === "group" && currentVal === "KAM Comments")) { 
+      select.value = currentVal; 
+    } else { 
+      select.value = ""; 
+      filters[id] = ""; 
+    }
   });
 
+  // Apply filters one last time after cascading logic
   rows = allRows.filter(r => {
     if (filters.region && r[C.region] !== filters.region) return false;
-    if (filters.group && r[C.group] !== filters.group) return false;
+    
+    if (filters.group) {
+      if (filters.group === "KAM Comments") {
+        if (!hasKamComment(r)) return false;
+      } else {
+        if (r[C.group] !== filters.group) return false;
+      }
+    }
+    
     if (filters.category && r[C.category] !== filters.category) return false;
     if (filters.forecast && r[C.forecast] !== filters.forecast) return false;
     if (filters.timeline && r[C.timeline] !== filters.timeline) return false;
@@ -571,15 +611,18 @@ function updateKpis() {
   $("total").textContent = rows.length;
   $("delayed").textContent = rows.filter(r => r[C.group] === "Delayed Renewal").length;
   $("due").textContent = rows.filter(r => r[C.group] === "Renewal Due / Expiry").length;
-  $("kam").textContent = rows.filter(r => r[C.group] === "KAM Comments").length;
+  
+  // KPI counts based on the presence of a comment, NOT the group
+  $("kam").textContent = rows.filter(r => hasKamComment(r)).length;
+  
   $("tcv").textContent = moneyMillion(rows.reduce((t, r) => t + (Number(r[C.tcv]) || 0), 0));
   $("revenue").textContent = moneyMillion(rows.reduce((t, r) => t + (Number(r[C.revenue]) || 0), 0));
   $("rowCount").textContent = `${rows.length} record${rows.length === 1 ? "" : "s"}`;
 }
 
 function renderTable() {
-  const isKamFiltered = $("group").value === "KAM Comments";
-  const displayColumns = columns.filter(col => !(isKamFiltered && col === C.group));
+  // Always show all columns, don't hide Group when filtering by KAM Comments
+  const displayColumns = columns;
 
   $("thead").innerHTML = `<tr>` + displayColumns.map(col => {
     const marker = sortColumn === col ? (sortDirection === 1 ? " &uarr;" : " &darr;") : "";
@@ -600,7 +643,7 @@ function renderTable() {
       <td><strong>${esc(r[C.opp])}</strong></td>
       <td><div style="max-width: 150px; white-space: normal; overflow: hidden;" title="${esc(r[C.response] || "")}">${esc(r[C.response] || "—")}</div></td>
       <td>${esc(r[C.region])}</td>
-      ${isKamFiltered ? '' : `<td>${groupBadge(r[C.group])}</td>`}
+      <td>${groupBadge(r[C.group])}</td>
       <td>${esc(r[C.category])}</td>
       <td>${forecastBadge(r[C.forecast])}</td>
       <td>${esc(r[C.timeline])}</td>
