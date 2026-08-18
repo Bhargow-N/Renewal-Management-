@@ -922,7 +922,7 @@ async function submitOpp(event) {
     if (result.success) {
       document.getElementById('oppModal').style.display = 'none';
       await loadExcelData(); // Reload data directly from server
-      alert("Successfully saved to Excel!");
+      alert("Successfully saved to the Database!");
     } else {
       alert("Error: " + result.message);
     }
