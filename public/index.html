@@ -853,9 +853,17 @@ async function submitOpp(event) {
 
   // We only send fields that are actually filled in, so we don't accidentally overwrite existing data with blanks on an update.
   const newData = { "Opportunity Name": oppName };
-  if (kamResponse) newData["Last Received Response from KAM"] = kamResponse;
+  
+  if (kamResponse) {
+    newData["Last Received Response from KAM"] = kamResponse;
+    newData["Group"] = "KAM Comments"; // Automatically update group so it reflects in the KPI and filters
+  }
+  
   if (region) newData["Sub-Region"] = region;
-  if (group) newData["Group"] = group;
+  
+  // Only use the user-provided group if we didn't just auto-set it to KAM Comments
+  if (group && !newData["Group"]) newData["Group"] = group;
+  
   if (forecast) newData["Forecast Category"] = forecast;
   if (endDate) newData["Service End Date"] = endDate;
   if (!isNaN(tcv)) newData["TCV Amount"] = tcv;
