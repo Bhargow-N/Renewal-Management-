@@ -45,10 +45,39 @@ app.get("/api/data", (req, res) => {
     });
   } catch (error) {
     console.error(error);
-    res.status(500).json({
-      success: false,
-      message: error.message
-    });
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+app.post("/api/data", (req, res) => {
+  try {
+    const newData = req.body;
+    if (!newData || !newData["Opportunity Name"]) {
+      return res.status(400).json({ success: false, message: "Opportunity Name is required" });
+    }
+
+    const workbook = XLSX.readFile(EXCEL_FILE, { cellDates: true });
+    const sheetName = workbook.SheetNames[0];
+    const sheet = workbook.Sheets[sheetName];
+    const rows = XLSX.utils.sheet_to_json(sheet, { defval: "" });
+
+    // Find if it exists to update, or append if new
+    const existingIndex = rows.findIndex(r => String(r["Opportunity Name"]).trim() === String(newData["Opportunity Name"]).trim());
+    if (existingIndex >= 0) {
+      rows[existingIndex] = { ...rows[existingIndex], ...newData };
+    } else {
+      rows.push(newData);
+    }
+
+    // Write back to Excel
+    const newSheet = XLSX.utils.json_to_sheet(rows);
+    workbook.Sheets[sheetName] = newSheet;
+    XLSX.writeFile(workbook, EXCEL_FILE);
+
+    res.json({ success: true, message: "Data saved successfully" });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ success: false, message: error.message });
   }
 });
 
