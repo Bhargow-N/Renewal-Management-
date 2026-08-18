@@ -1,47 +1,65 @@
+require("dotenv").config();
 const express = require("express");
 const path = require("path");
-const fs = require("fs");
-const XLSX = require("xlsx");
+const { createClient } = require("@supabase/supabase-js");
 
 const app = express();
 const PORT = process.env.PORT || 3000;
-const EXCEL_FILE = path.join(__dirname, "Renewal_Opportunity_1000_Realistic.xlsx");
+
+// Supabase setup
+const supabaseUrl = process.env.SUPABASE_URL;
+const supabaseKey = process.env.SUPABASE_KEY;
+
+if (!supabaseUrl || !supabaseKey) {
+  console.error("Missing SUPABASE_URL or SUPABASE_KEY in environment variables.");
+  process.exit(1);
+}
+
+const supabase = createClient(supabaseUrl, supabaseKey);
+
 const PUBLIC_DIR = path.join(__dirname, "public");
 
 app.use(express.json());
 app.use(express.static(PUBLIC_DIR));
 
-function readExcel() {
-  if (!fs.existsSync(EXCEL_FILE)) {
-    throw new Error(`Excel file not found: ${EXCEL_FILE}`);
-  }
-
-  const workbook = XLSX.readFile(EXCEL_FILE, { cellDates: true });
-  const sheetName = workbook.SheetNames[0];
-  const sheet = workbook.Sheets[sheetName];
-
-  // defval keeps blank Excel cells as empty strings instead of dropping columns.
-  const rows = XLSX.utils.sheet_to_json(sheet, { defval: "" });
-
-  return {
-    sheetName,
-    lastModified: fs.statSync(EXCEL_FILE).mtime.toISOString(),
-    rows
-  };
-}
-
-// Excel is read on every API request, so saved changes are reflected
-// the next time the dashboard calls /api/data.
-app.get("/api/data", (req, res) => {
+app.get("/api/data", async (req, res) => {
   try {
-    const result = readExcel();
+    let allData = [];
+    let from = 0;
+    const step = 1000;
+    let hasMore = true;
+    let totalCount = 0;
+
+    // Supabase has a default limit of 1000 rows per request.
+    // We loop here to fetch everything if there are more than 1000.
+    while (hasMore) {
+      const { data, error, count } = await supabase
+        .from("renewals")
+        .select("data", { count: "exact" })
+        .range(from, from + step - 1);
+
+      if (error) throw error;
+      if (from === 0) totalCount = count;
+
+      allData = allData.concat(data);
+
+      if (data.length < step) {
+        hasMore = false;
+      } else {
+        from += step;
+      }
+    }
+
+    // Extract the JSON data from each row to match the old API format
+    const rows = allData.map((row) => row.data);
+
     res.json({
       success: true,
-      source: path.basename(EXCEL_FILE),
-      sheet: result.sheetName,
-      lastModified: result.lastModified,
-      count: result.rows.length,
-      rows: result.rows
+      source: "Supabase DB",
+      sheet: "Renewals",
+      lastModified: new Date().toISOString(),
+      count: totalCount || rows.length,
+      rows: rows,
     });
   } catch (error) {
     console.error(error);
@@ -49,32 +67,42 @@ app.get("/api/data", (req, res) => {
   }
 });
 
-app.post("/api/data", (req, res) => {
+app.post("/api/data", async (req, res) => {
   try {
     const newData = req.body;
     if (!newData || !newData["Opportunity Name"]) {
       return res.status(400).json({ success: false, message: "Opportunity Name is required" });
     }
 
-    const workbook = XLSX.readFile(EXCEL_FILE, { cellDates: true });
-    const sheetName = workbook.SheetNames[0];
-    const sheet = workbook.Sheets[sheetName];
-    const rows = XLSX.utils.sheet_to_json(sheet, { defval: "" });
+    const opportunityName = String(newData["Opportunity Name"]).trim();
 
-    // Find if it exists to update, or append if new
-    const existingIndex = rows.findIndex(r => String(r["Opportunity Name"]).trim() === String(newData["Opportunity Name"]).trim());
-    if (existingIndex >= 0) {
-      rows[existingIndex] = { ...rows[existingIndex], ...newData };
-    } else {
-      rows.push(newData);
+    // Fetch existing record to merge data, just like the old Excel logic
+    const { data: existingRecords, error: fetchError } = await supabase
+      .from("renewals")
+      .select("data")
+      .eq("Opportunity Name", opportunityName);
+
+    if (fetchError) throw fetchError;
+
+    let mergedData = newData;
+    if (existingRecords && existingRecords.length > 0) {
+      mergedData = { ...existingRecords[0].data, ...newData };
     }
 
-    // Write back to Excel
-    const newSheet = XLSX.utils.json_to_sheet(rows);
-    workbook.Sheets[sheetName] = newSheet;
-    XLSX.writeFile(workbook, EXCEL_FILE);
+    // Upsert (Update or Insert)
+    const { error: upsertError } = await supabase
+      .from("renewals")
+      .upsert(
+        {
+          "Opportunity Name": opportunityName,
+          data: mergedData,
+        },
+        { onConflict: "Opportunity Name" }
+      );
 
-    res.json({ success: true, message: "Data saved successfully" });
+    if (upsertError) throw upsertError;
+
+    res.json({ success: true, message: "Data saved successfully to Supabase" });
   } catch (error) {
     console.error(error);
     res.status(500).json({ success: false, message: error.message });
@@ -88,7 +116,7 @@ app.get("/api/health", (req, res) => {
 if (process.env.NODE_ENV !== "production") {
   app.listen(PORT, () => {
     console.log(`Renewal Dashboard running at http://localhost:${PORT}`);
-    console.log(`Excel source: ${EXCEL_FILE}`);
+    console.log(`Connected to Supabase at ${supabaseUrl}`);
   });
 }
 
