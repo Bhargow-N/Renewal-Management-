@@ -22,6 +22,47 @@ const PUBLIC_DIR = path.join(__dirname, "public");
 app.use(express.json());
 app.use(express.static(PUBLIC_DIR));
 
+// SSE Clients array
+let sseClients = [];
+
+// Helper to broadcast events to all connected clients
+function broadcastEvent(data) {
+  sseClients.forEach(client => client.res.write(`data: ${JSON.stringify(data)}\n\n`));
+}
+
+// SSE Endpoint for real-time notifications
+app.get("/api/events", (req, res) => {
+  res.setHeader("Content-Type", "text/event-stream");
+  res.setHeader("Cache-Control", "no-cache");
+  res.setHeader("Connection", "keep-alive");
+  res.flushHeaders();
+
+  const clientId = Date.now();
+  const newClient = { id: clientId, res };
+  sseClients.push(newClient);
+
+  req.on("close", () => {
+    sseClients = sseClients.filter(client => client.id !== clientId);
+  });
+});
+
+// Endpoint to fetch activity logs
+app.get("/api/logs", async (req, res) => {
+  try {
+    const { data, error } = await supabase
+      .from("activity_logs")
+      .select("*")
+      .order("created_at", { ascending: false })
+      .limit(100);
+
+    if (error) throw error;
+    res.json({ success: true, logs: data || [] });
+  } catch (error) {
+    console.error("Error fetching logs:", error);
+    res.status(500).json({ success: false, message: error.message, logs: [] });
+  }
+});
+
 app.get("/api/data", async (req, res) => {
   try {
     let allData = [];
@@ -85,8 +126,25 @@ app.post("/api/data", async (req, res) => {
     if (fetchError) throw fetchError;
 
     let mergedData = newData;
+    let isUpdate = false;
+    let changes = null;
+    
     if (existingRecords && existingRecords.length > 0) {
-      mergedData = { ...existingRecords[0].data, ...newData };
+      const oldData = existingRecords[0].data;
+      mergedData = { ...oldData, ...newData };
+      isUpdate = true;
+      
+      // Calculate what changed
+      changes = {};
+      for (const key in newData) {
+        // Only track fields that are actually different and ignore the primary key
+        if (newData[key] !== oldData[key] && key !== "Opportunity Name") {
+          // If the field is just being set from empty to empty, ignore it
+          if (!oldData[key] && !newData[key]) continue; 
+          changes[key] = { old: oldData[key] || "—", new: newData[key] || "—" };
+        }
+      }
+      if (Object.keys(changes).length === 0) changes = null;
     }
 
     // Upsert (Update or Insert)
@@ -101,6 +159,30 @@ app.post("/api/data", async (req, res) => {
       );
 
     if (upsertError) throw upsertError;
+
+    // Log the activity
+    const action = isUpdate ? "Updated" : "Added";
+    const logMessage = `${action} record: ${opportunityName}`;
+    
+    try {
+      await supabase.from("activity_logs").insert([{
+        action: action,
+        record_name: opportunityName,
+        details: logMessage,
+        changes: changes
+      }]);
+    } catch (logError) {
+      console.error("Failed to insert log:", logError);
+      // We don't fail the request if logging fails
+    }
+
+    // Broadcast event to connected clients
+    broadcastEvent({
+      action: action,
+      recordName: opportunityName,
+      message: logMessage,
+      timestamp: new Date().toISOString()
+    });
 
     res.json({ success: true, message: "Data saved successfully to Supabase" });
   } catch (error) {
