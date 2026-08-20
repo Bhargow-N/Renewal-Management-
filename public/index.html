@@ -12,6 +12,8 @@
 
 <!-- Chart.js -->
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<!-- html2pdf.js -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
 
 <style>
   :root {
@@ -45,7 +47,7 @@
   .modal-title { font-size: 16px; font-weight: 700; color: var(--primary); }
   .modal-close { background: transparent; border: none; font-size: 24px; cursor: pointer; color: var(--text-muted); line-height: 1; transition: color 0.2s; }
   .modal-close:hover { color: var(--danger); }
-  .modal-body { padding: 24px 32px; display: flex; flex-direction: column; gap: 20px; }
+  .modal-body { padding: 24px 32px; display: flex; flex-direction: column; gap: 20px; overflow-y: auto; max-height: 70vh; }
 
   .choice-card { background: #ffffff; border: 1px solid var(--border-color); border-radius: var(--radius-lg); padding: 32px 20px; display: flex; flex-direction: column; align-items: center; text-align: center; gap: 12px; cursor: pointer; transition: all 0.2s; }
   .choice-card:hover { border-color: var(--accent); transform: translateY(-2px); box-shadow: var(--shadow-md); }
@@ -276,6 +278,22 @@
   .change-new { color: var(--success); font-weight: 500; }
   .expand-icon { transition: transform 0.2s; }
   .log-item.expanded .expand-icon { transform: rotate(180deg); }
+  /* 360 View Modal Styles */
+  #opp360Modal { display: none; }
+  #opp360Modal .modal-card { max-width: 1200px; height: 90vh; display: flex; flex-direction: column; background: var(--bg-main); }
+  #opp360Modal .modal-body { overflow-y: auto; flex: 1; padding: 24px; background: var(--bg-main); }
+  .v360-header { padding: 20px 24px; border-bottom: 1px solid var(--border-color); display: flex; justify-content: space-between; align-items: center; background: var(--card-bg); }
+  .v360-title { font-size: 20px; font-weight: 700; color: var(--primary); display: flex; align-items: center; gap: 12px; }
+  .v360-actions { display: flex; gap: 12px; align-items: center; }
+  .v360-tabs { display: flex; gap: 24px; border-bottom: 1px solid var(--border-color); padding: 0 24px; background: var(--card-bg); }
+  .v360-tab { padding: 12px 0; font-size: 13px; font-weight: 600; color: var(--text-muted); cursor: pointer; border-bottom: 2px solid transparent; }
+  .v360-tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+  .v360-section { display: none; flex-direction: column; gap: 24px; }
+  .v360-section.active { display: flex; }
+  .v360-details-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 16px; }
+  .v360-detail-item { background: #fff; padding: 12px; border: 1px solid var(--border-color); border-radius: 8px; }
+  .v360-detail-label { font-size: 10px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; margin-bottom: 4px; }
+  .v360-detail-value { font-size: 14px; font-weight: 600; color: var(--primary); }
 </style>
 </head>
 <body>
@@ -342,6 +360,61 @@
           <button type="submit" class="btn-sm btn-save">Save Opportunity</button>
         </div>
       </form>
+    </div>
+  </div>
+</div>
+
+<!-- Opportunity 360 View Modal -->
+<div id="opp360Modal" class="modal-overlay">
+  <div class="modal-card">
+    <div class="v360-header" data-html2canvas-ignore="true">
+      <div class="v360-title">
+        <button class="btn-sm btn-save" onclick="closeOpp360()" style="margin-right:8px;">← Back</button>
+        <span id="v360Name">Opportunity Name</span>
+        <div id="v360Badges" style="display:flex; gap:8px;"></div>
+      </div>
+      <div class="v360-actions">
+        <button class="btn-sm btn-outline" onclick="export360PDF()">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right:6px;"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+          Export PDF
+        </button>
+      </div>
+    </div>
+    
+    <div id="pdf-export-content" style="flex:1; display:flex; flex-direction:column;">
+      <div class="v360-title" id="pdf-title-only" style="display:none; padding: 24px 24px 0 24px; font-size: 24px; color: #000;"></div>
+      
+      <div class="v360-tabs" data-html2canvas-ignore="true">
+        <div class="v360-tab active" onclick="switch360Tab('overview')">Overview</div>
+        <div class="v360-tab" onclick="switch360Tab('contacts')">Customer Contacts</div>
+        <div class="v360-tab" onclick="switch360Tab('history')">Activity History</div>
+      </div>
+      <div class="modal-body">
+        <!-- Overview Section -->
+        <div id="v360-overview" class="v360-section active">
+          <div class="card">
+            <div class="card-header"><div class="card-title">Opportunity Details</div></div>
+            <div style="padding: 20px;">
+              <div class="v360-details-grid" id="v360DetailsGrid"></div>
+            </div>
+          </div>
+          <div class="card">
+            <div class="card-header"><div class="card-title">KAM Response</div></div>
+            <div style="padding: 20px; font-size: 13px;" id="v360KamResponse"></div>
+          </div>
+        </div>
+        <!-- Contacts Section -->
+        <div id="v360-contacts" class="v360-section">
+          <div class="contacts-grid" id="v360ContactsGrid"></div>
+        </div>
+        <!-- History Section -->
+        <div id="v360-history" class="v360-section">
+          <div class="card">
+             <div class="card-header"><div class="card-title">Activity Log</div></div>
+             <div id="v360HistoryLog" style="padding:20px; display:flex; flex-direction:column; gap:12px;"></div>
+          </div>
+        </div>
+      </div>
     </div>
   </div>
 </div>
@@ -455,10 +528,18 @@
     <!-- Customer Contacts Tab -->
     <div id="contacts-tab" class="tab-content">
       <div class="contacts-section" style="margin-top: 0;">
-        <div class="contacts-header">
-          <div class="contacts-title">Customer Contacts Section</div>
+        <div class="contacts-header" style="display: flex; justify-content: space-between; align-items: center; width: 100%; border-bottom: 1px solid var(--border-color); padding-bottom: 16px; margin-bottom: 24px;">
+          <div class="contacts-title">Customer Contacts Search</div>
+          <div class="form-group" style="position: relative; width: 400px; margin-bottom: 0;">
+            <input type="text" id="mainContactSearch" placeholder="Search opportunity name..." autocomplete="off" oninput="handleMainContactSearch(event)" onkeydown="handleMainContactKeydown(event)">
+            <div id="mainContactSuggestions" class="suggestions-box"></div>
+          </div>
         </div>
-        <div class="contacts-grid" id="contactsGrid"></div>
+        <div class="contacts-grid" id="contactsGrid">
+          <div style="grid-column: 1 / -1; padding: 40px; text-align: center; color: var(--text-muted); font-size: 14px;">
+            Search and select an opportunity above to view and manage its contacts.
+          </div>
+        </div>
       </div>
     </div>
 
@@ -786,9 +867,9 @@ function renderTable() {
   $("tbody").innerHTML = rows.map(r => {
     const oppEscaped = String(r[C.opp]).replace(/"/g, '&quot;').replace(/'/g, '\\\'');
     return `
-    <tr>
+    <tr onclick="openOpp360('${oppEscaped}')" style="cursor: pointer;">
       <td>
-        <button class="row-action-btn" onclick="inlineEditOpp('${oppEscaped}')" title="Edit Record">
+        <button class="row-action-btn" onclick="event.stopPropagation(); inlineEditOpp('${oppEscaped}')" title="Edit Record">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"></path><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path></svg>
         </button>
       </td>
@@ -1162,26 +1243,94 @@ $("search").addEventListener("input", applyFilters);
 $("clear").onclick = clearAllFilters;
 
 /* Customer Contacts Logic */
-let savedContacts = JSON.parse(localStorage.getItem('customerContacts')) || {};
-let activeFormCategory = null;
-let editingCategory = null;
-let editingIndex = null;
-
 const CONTACT_CATEGORIES = ['ROAMING', 'SIGNALING', 'NETWORK SECURITY', 'CUSTOMER INTELLIGENCE'];
+let mainContactsData = null; // Stores the row data of the currently selected opportunity in the main tab
+let mainContacts = {}; // Local state for rendering
+let mainActiveFormCategory = null;
+let mainEditingCategory = null;
+let mainEditingIndex = null;
 
-function renderContacts() {
-  const country = "India";
-  const grid = document.getElementById("contactsGrid");
+function handleMainContactSearch(e) {
+  const val = e.target.value.toLowerCase();
+  const box = document.getElementById('mainContactSuggestions');
   
-  if (!savedContacts[country]) {
-    savedContacts[country] = {
-      'ROAMING': [], 'SIGNALING': [], 'NETWORK SECURITY': [], 'CUSTOMER INTELLIGENCE': []
-    };
+  if (!val || val.length < 2) {
+    box.style.display = 'none';
+    return;
   }
+  
+  const matches = allRows.filter(r => String(r[C.opp] || '').toLowerCase().includes(val)).slice(0, 10);
+  
+  if (matches.length === 0) {
+    box.innerHTML = `<div style="padding: 8px 12px; font-size: 11px; color: var(--text-muted);">No matching opportunities found.</div>`;
+    box.style.display = 'block';
+    return;
+  }
+  
+  box.innerHTML = matches.map(r => {
+    const oppName = String(r[C.opp] || '');
+    const escName = oppName.replace(/"/g, '&quot;').replace(/'/g, '\\\'');
+    return `
+      <div class="suggestion-item" onclick="selectMainContactOpp('${escName}')">
+        <span class="suggestion-opp">${esc(oppName)}</span>
+        <span class="suggestion-detail">${esc(r[C.region] || '')} • ${esc(r[C.group] || '')}</span>
+      </div>
+    `;
+  }).join('');
+  box.style.display = 'block';
+}
 
+// Close suggestions if clicking outside
+document.addEventListener('click', function(e) {
+  if (!e.target.closest('#mainContactSearch') && !e.target.closest('#mainContactSuggestions')) {
+    const box = document.getElementById('mainContactSuggestions');
+    if(box) box.style.display = 'none';
+  }
+});
+
+function handleMainContactKeydown(e) {
+  if (e.key === 'Enter') {
+    e.preventDefault();
+    forceMainContactSearch();
+  }
+}
+
+function forceMainContactSearch() {
+  const val = document.getElementById('mainContactSearch').value.toLowerCase().trim();
+  if (!val) return;
+  const match = allRows.find(r => String(r[C.opp] || '').toLowerCase() === val || String(r[C.opp] || '').toLowerCase().includes(val));
+  if (match) {
+    selectMainContactOpp(String(match[C.opp]));
+  } else {
+    alert("No matching opportunity found. Please try a different search term.");
+  }
+}
+
+function selectMainContactOpp(oppName) {
+  document.getElementById('mainContactSearch').value = oppName;
+  document.getElementById('mainContactSuggestions').style.display = 'none';
+  
+  const row = allRows.find(r => String(r[C.opp]) === oppName);
+  if (!row) return;
+  
+  mainContactsData = row;
+  mainContacts = row.contacts || { 'ROAMING': [], 'SIGNALING': [], 'NETWORK SECURITY': [], 'CUSTOMER INTELLIGENCE': [] };
+  mainActiveFormCategory = null;
+  renderMainContacts();
+}
+
+function renderMainContacts() {
+  const grid = document.getElementById("contactsGrid");
+  if (!mainContactsData) {
+    grid.innerHTML = `<div style="grid-column: 1 / -1; padding: 40px; text-align: center; color: var(--text-muted); font-size: 14px;">
+      Search and select an opportunity above to view and manage its contacts.
+    </div>`;
+    return;
+  }
+  
   let html = '';
   CONTACT_CATEGORIES.forEach(cat => {
-    const contacts = savedContacts[country][cat] || [];
+    const contacts = mainContacts[cat] || [];
     const count = contacts.length;
     
     html += `
@@ -1193,7 +1342,7 @@ function renderContacts() {
     `;
 
     if (count === 0) {
-      html += `<div class="contact-empty-text" id="empty-${cat}">No contacts added yet.</div>`;
+      html += `<div class="contact-empty-text">No contacts added yet.</div>`;
     } else {
       html += `<div class="contact-list">`;
       contacts.forEach((c, index) => {
@@ -1205,10 +1354,10 @@ function renderContacts() {
                 <div class="ci-position">${esc(c.position)}</div>
               </div>
               <div style="display:flex; gap:4px;">
-                <button class="btn-delete" onclick="editContact('${cat}', ${index})" title="Edit Contact">
+                <button class="btn-delete" onclick="editMainContact('${cat}', ${index})" title="Edit Contact">
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"></path></svg>
                 </button>
-                <button class="btn-delete" onclick="deleteContact('${cat}', ${index})" title="Delete Contact">
+                <button class="btn-delete" onclick="deleteMainContact('${cat}', ${index})" title="Delete Contact">
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>
                 </button>
               </div>
@@ -1221,27 +1370,27 @@ function renderContacts() {
       html += `</div>`;
     }
 
-    if (activeFormCategory === cat) {
+    if (mainActiveFormCategory === cat) {
       html += `
         <div class="contact-form" style="display:flex;">
-          <div class="form-group"><label>Contact Name *</label><input id="cName" type="text" placeholder="e.g. John Doe"></div>
-          <div class="form-group"><label>Email ID *</label><input id="cEmail" type="email" placeholder="john@operator.com"></div>
-          <div class="form-group"><label>Position</label><input id="cPos" type="text" placeholder="e.g. VP Operations"></div>
-          <div class="form-group"><label>Mobile Number</label><input id="cPhone" type="tel" placeholder="+966 50 123 4567"></div>
+          <div class="form-group"><label>Contact Name *</label><input id="mainCName" type="text" placeholder="e.g. John Doe"></div>
+          <div class="form-group"><label>Email ID *</label><input id="mainCEmail" type="email" placeholder="john@operator.com"></div>
+          <div class="form-group"><label>Position</label><input id="mainCPos" type="text" placeholder="e.g. VP Operations"></div>
+          <div class="form-group"><label>Mobile Number</label><input id="mainCPhone" type="tel" placeholder="+966 50 123 4567"></div>
           <div class="form-group">
             <label>Decision Authority</label>
-            <select id="cAuth">
+            <select id="mainCAuth">
               <option>No</option><option>Yes</option><option>Unknown</option>
             </select>
           </div>
           <div class="form-actions">
-            <button class="btn-sm btn-cancel" onclick="toggleForm(null)">Cancel</button>
-            <button class="btn-sm btn-save" onclick="saveContact('${cat}')">Save</button>
+            <button class="btn-sm btn-cancel" onclick="toggleMainForm(null)">Cancel</button>
+            <button class="btn-sm btn-save" onclick="saveMainContact('${cat}')">Save</button>
           </div>
         </div>
       `;
     } else {
-      html += `<button class="btn-add-contact" onclick="toggleForm('${cat}')">+ Add Contact</button>`;
+      html += `<button class="btn-add-contact" onclick="toggleMainForm('${cat}')">+ Add Contact</button>`;
     }
     
     html += `</div>`;
@@ -1250,16 +1399,41 @@ function renderContacts() {
   grid.innerHTML = html;
 }
 
-function toggleForm(category) {
-  activeFormCategory = category;
-  editingCategory = null;
-  editingIndex = null;
-  renderContacts();
+function toggleMainForm(category) {
+  mainActiveFormCategory = category;
+  mainEditingCategory = null;
+  mainEditingIndex = null;
+  renderMainContacts();
 }
 
-function saveContact(category) {
-  const name = $('cName').value.trim();
-  const email = $('cEmail').value.trim();
+function editMainContact(category, index) {
+  mainActiveFormCategory = category;
+  mainEditingCategory = category;
+  mainEditingIndex = index;
+  renderMainContacts();
+  
+  setTimeout(() => {
+    const contact = mainContacts[category][index];
+    if(contact) {
+      document.getElementById('mainCName').value = contact.name || '';
+      document.getElementById('mainCEmail').value = contact.email || '';
+      document.getElementById('mainCPos').value = contact.position || '';
+      document.getElementById('mainCPhone').value = contact.phone || '';
+      document.getElementById('mainCAuth').value = contact.auth || 'No';
+    }
+  }, 0);
+}
+
+function deleteMainContact(category, index) {
+  if(confirm("Are you sure you want to delete this contact?")) {
+    mainContacts[category].splice(index, 1);
+    saveAllMainContactsToDb();
+  }
+}
+
+function saveMainContact(category) {
+  const name = document.getElementById('mainCName').value.trim();
+  const email = document.getElementById('mainCEmail').value.trim();
   if (!name || !email) {
     alert("Name and Email are required");
     return;
@@ -1268,55 +1442,50 @@ function saveContact(category) {
   const contact = {
     name,
     email,
-    position: $('cPos').value.trim(),
-    phone: $('cPhone').value.trim(),
-    auth: $('cAuth').value
+    position: document.getElementById('mainCPos').value.trim(),
+    phone: document.getElementById('mainCPhone').value.trim(),
+    auth: document.getElementById('mainCAuth').value
   };
 
-  const country = "India";
-  if (!savedContacts[country]) savedContacts[country] = {};
-  if (!savedContacts[country][category]) savedContacts[country][category] = [];
+  if (!mainContacts[category]) mainContacts[category] = [];
 
-  if (editingCategory === category && editingIndex !== null) {
-    savedContacts[country][category][editingIndex] = contact;
+  if (mainEditingCategory === category && mainEditingIndex !== null) {
+    mainContacts[category][mainEditingIndex] = contact;
   } else {
-    savedContacts[country][category].push(contact);
+    mainContacts[category].push(contact);
   }
 
-  localStorage.setItem('customerContacts', JSON.stringify(savedContacts));
-  activeFormCategory = null;
-  renderContacts();
+  saveAllMainContactsToDb();
 }
 
-function editContact(category, index) {
-  activeFormCategory = category;
-  editingCategory = category;
-  editingIndex = index;
-  renderContacts();
-  
-  // Need to populate the form in the next tick
-  setTimeout(() => {
-    const contact = savedContacts["India"][category][index];
-    if(contact) {
-      $('cName').value = contact.name || '';
-      $('cEmail').value = contact.email || '';
-      $('cPos').value = contact.position || '';
-      $('cPhone').value = contact.phone || '';
-      $('cAuth').value = contact.auth || 'No';
+async function saveAllMainContactsToDb() {
+  if (!mainContactsData) return;
+  const oppName = mainContactsData[C.opp];
+
+  const newData = {
+    "Opportunity Name": oppName,
+    "contacts": mainContacts
+  };
+
+  try {
+    const res = await fetch("/api/data", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(newData)
+    });
+    const result = await res.json();
+    if (result.success) {
+      showToast("Contacts saved to Database", "success");
+      mainActiveFormCategory = null;
+      // Re-fetch data silently to update our allRows state
+      loadExcelData();
+    } else {
+      alert("Error saving contacts: " + result.message);
     }
-  }, 0);
-}
-
-function deleteContact(category, index) {
-  if(confirm("Are you sure you want to delete this contact?")) {
-    savedContacts["India"][category].splice(index, 1);
-    localStorage.setItem('customerContacts', JSON.stringify(savedContacts));
-    renderContacts();
+  } catch(e) {
+    alert("Failed to save data: " + e.message);
   }
 }
-
-// Ensure contacts are rendered initially
-renderContacts();
 
 /* Real-time Notifications & Activity Log Logic */
 function showToast(message, type = 'info') {
@@ -1436,6 +1605,304 @@ function setupSSE() {
 setupSSE();
 setInterval(loadExcelData, 60 * 1000);
 loadExcelData();
+
+// --- 360 View Logic ---
+let current360Opp = null;
+let current360Data = null;
+let v360Contacts = {};
+let v360ActiveFormCategory = null;
+let v360EditingCategory = null;
+let v360EditingIndex = null;
+
+function switch360Tab(tabId) {
+  document.querySelectorAll('.v360-tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.v360-section').forEach(s => s.classList.remove('active'));
+  
+  event.currentTarget.classList.add('active');
+  document.getElementById('v360-' + tabId).classList.add('active');
+}
+
+function closeOpp360() {
+  document.getElementById('opp360Modal').style.display = 'none';
+}
+
+function openOpp360(oppName) {
+  current360Opp = oppName;
+  const row = allRows.find(r => String(r[C.opp]) === oppName);
+  if (!row) return;
+  current360Data = row;
+  
+  document.getElementById('opp360Modal').style.display = 'flex';
+  document.getElementById('v360Name').innerText = oppName;
+  document.getElementById('pdf-title-only').innerText = oppName + ' - 360 View';
+  
+  let badges = groupBadge(row[C.group]) + forecastBadge(row[C.forecast]);
+  document.getElementById('v360Badges').innerHTML = badges;
+  
+  // Render Overview
+  const excludeFields = [C.opp, C.response, "contacts"];
+  let detailsHtml = '';
+  for (const [key, val] of Object.entries(row)) {
+    if (excludeFields.includes(key)) continue;
+    let displayVal = val;
+    if (key === C.tcv || key === C.revenue || key === C.acv) displayVal = money(val);
+    detailsHtml += `
+      <div class="v360-detail-item">
+        <div class="v360-detail-label">${esc(key)}</div>
+        <div class="v360-detail-value">${displayVal || '—'}</div>
+      </div>
+    `;
+  }
+  document.getElementById('v360DetailsGrid').innerHTML = detailsHtml;
+  document.getElementById('v360KamResponse').innerText = row[C.response] || "No response provided.";
+  
+  // Render Contacts
+  v360Contacts = row.contacts || { 'ROAMING': [], 'SIGNALING': [], 'NETWORK SECURITY': [], 'CUSTOMER INTELLIGENCE': [] };
+  v360ActiveFormCategory = null;
+  render360Contacts();
+  
+  // Load History
+  load360History(oppName);
+  
+  // Default to overview tab
+  document.querySelector('.v360-tab').click();
+}
+
+async function load360History(oppName) {
+  const container = document.getElementById('v360HistoryLog');
+  container.innerHTML = '<div style="color:var(--text-muted);">Loading history...</div>';
+  try {
+    const res = await fetch('/api/logs');
+    const data = await res.json();
+    if (!data.success) throw new Error("Failed to load");
+    
+    const logs = data.logs.filter(l => l.record_name === oppName);
+    if (logs.length === 0) {
+      container.innerHTML = '<div style="color:var(--text-muted);">No activity recorded for this opportunity yet.</div>';
+      return;
+    }
+    
+    container.innerHTML = logs.map(log => {
+      const time = new Date(log.created_at).toLocaleString();
+      let changesHtml = '';
+      if (log.changes) {
+        changesHtml = `<div class="log-changes" style="display:block; margin-top:8px;">`;
+        for (const [field, vals] of Object.entries(log.changes)) {
+          if (field === "contacts") continue; // Skip contact spam in UI if desired
+          changesHtml += `
+            <div class="change-row">
+              <div class="change-field">${esc(field)}</div>
+              <div class="change-values">
+                <div class="change-old">- ${esc(vals.old)}</div>
+                <div class="change-new">+ ${esc(vals.new)}</div>
+              </div>
+            </div>
+          `;
+        }
+        changesHtml += `</div>`;
+      }
+      
+      return `
+        <div class="log-item ${log.action === 'Added' ? 'added' : 'updated'}">
+          <div class="log-item-title">${esc(log.details)}</div>
+          <div class="log-item-time">${time}</div>
+          ${changesHtml}
+        </div>
+      `;
+    }).join('');
+  } catch(e) {
+    container.innerHTML = `<div style="color:var(--danger);">Error loading history.</div>`;
+  }
+}
+
+function render360Contacts() {
+  const grid = document.getElementById("v360ContactsGrid");
+  let html = '';
+  CONTACT_CATEGORIES.forEach(cat => {
+    const contacts = v360Contacts[cat] || [];
+    const count = contacts.length;
+    
+    html += `
+      <div class="contact-card">
+        <div class="contact-card-header">
+          <div class="contact-category">${cat}</div>
+          <div class="contact-count-badge">${count} Contact${count !== 1 ? 's' : ''}</div>
+        </div>
+    `;
+
+    if (count === 0) {
+      html += `<div class="contact-empty-text">No contacts added yet.</div>`;
+    } else {
+      html += `<div class="contact-list">`;
+      contacts.forEach((c, index) => {
+        html += `
+          <div class="contact-item">
+            <div class="ci-header">
+              <div>
+                <div class="ci-name">${esc(c.name)}</div>
+                <div class="ci-position">${esc(c.position)}</div>
+              </div>
+              <div style="display:flex; gap:4px;" data-html2canvas-ignore="true">
+                <button class="btn-delete" onclick="edit360Contact('${cat}', ${index})" title="Edit Contact">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"></path></svg>
+                </button>
+                <button class="btn-delete" onclick="delete360Contact('${cat}', ${index})" title="Delete Contact">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>
+                </button>
+              </div>
+            </div>
+            <div class="ci-detail"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path><polyline points="22,6 12,13 2,6"></polyline></svg> ${esc(c.email)}</div>
+            ${c.phone ? `<div class="ci-detail"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"></path></svg> ${esc(c.phone)}</div>` : ''}
+          </div>
+        `;
+      });
+      html += `</div>`;
+    }
+
+    if (v360ActiveFormCategory === cat) {
+      html += `
+        <div class="contact-form" style="display:flex;">
+          <div class="form-group"><label>Contact Name *</label><input id="v360cName" type="text" placeholder="e.g. John Doe"></div>
+          <div class="form-group"><label>Email ID *</label><input id="v360cEmail" type="email" placeholder="john@operator.com"></div>
+          <div class="form-group"><label>Position</label><input id="v360cPos" type="text" placeholder="e.g. VP Operations"></div>
+          <div class="form-group"><label>Mobile Number</label><input id="v360cPhone" type="tel" placeholder="+966 50 123 4567"></div>
+          <div class="form-group">
+            <label>Decision Authority</label>
+            <select id="v360cAuth">
+              <option>No</option><option>Yes</option><option>Unknown</option>
+            </select>
+          </div>
+          <div class="form-actions">
+            <button class="btn-sm btn-cancel" onclick="toggle360Form(null)">Cancel</button>
+            <button class="btn-sm btn-save" onclick="save360Contact('${cat}')">Save</button>
+          </div>
+        </div>
+      `;
+    } else {
+      html += `<button class="btn-add-contact" data-html2canvas-ignore="true" onclick="toggle360Form('${cat}')">+ Add Contact</button>`;
+    }
+    
+    html += `</div>`;
+  });
+
+  grid.innerHTML = html;
+}
+
+function toggle360Form(category) {
+  v360ActiveFormCategory = category;
+  v360EditingCategory = null;
+  v360EditingIndex = null;
+  render360Contacts();
+}
+
+function edit360Contact(category, index) {
+  v360ActiveFormCategory = category;
+  v360EditingCategory = category;
+  v360EditingIndex = index;
+  render360Contacts();
+  
+  setTimeout(() => {
+    const contact = v360Contacts[category][index];
+    if(contact) {
+      document.getElementById('v360cName').value = contact.name || '';
+      document.getElementById('v360cEmail').value = contact.email || '';
+      document.getElementById('v360cPos').value = contact.position || '';
+      document.getElementById('v360cPhone').value = contact.phone || '';
+      document.getElementById('v360cAuth').value = contact.auth || 'No';
+    }
+  }, 0);
+}
+
+function delete360Contact(category, index) {
+  if(confirm("Are you sure you want to delete this contact?")) {
+    v360Contacts[category].splice(index, 1);
+    saveAll360ContactsToDb();
+  }
+}
+
+function save360Contact(category) {
+  const name = document.getElementById('v360cName').value.trim();
+  const email = document.getElementById('v360cEmail').value.trim();
+  if (!name || !email) {
+    alert("Name and Email are required");
+    return;
+  }
+
+  const contact = {
+    name,
+    email,
+    position: document.getElementById('v360cPos').value.trim(),
+    phone: document.getElementById('v360cPhone').value.trim(),
+    auth: document.getElementById('v360cAuth').value
+  };
+
+  if (!v360Contacts[category]) v360Contacts[category] = [];
+
+  if (v360EditingCategory === category && v360EditingIndex !== null) {
+    v360Contacts[category][v360EditingIndex] = contact;
+  } else {
+    v360Contacts[category].push(contact);
+  }
+
+  saveAll360ContactsToDb();
+}
+
+async function saveAll360ContactsToDb() {
+  const newData = {
+    "Opportunity Name": current360Opp,
+    "contacts": v360Contacts
+  };
+
+  try {
+    const res = await fetch("/api/data", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(newData)
+    });
+    const result = await res.json();
+    if (result.success) {
+      showToast("Contacts saved to Database", "success");
+      v360ActiveFormCategory = null;
+      // Re-fetch everything silently to ensure our local 'allRows' state is updated with the new contacts
+      loadExcelData();
+    } else {
+      alert("Error saving contacts: " + result.message);
+    }
+  } catch(e) {
+    alert("Failed to save data: " + e.message);
+  }
+}
+
+function export360PDF() {
+  // Show all sections temporarily for the PDF
+  document.querySelectorAll('.v360-section').forEach(s => {
+    s.style.display = 'flex';
+  });
+  
+  // Show the title inside the body
+  document.getElementById('pdf-title-only').style.display = 'block';
+  
+  const element = document.getElementById('pdf-export-content');
+  const opt = {
+    margin:       10,
+    filename:     current360Opp + ' - 360 View.pdf',
+    image:        { type: 'jpeg', quality: 0.98 },
+    html2canvas:  { scale: 2, useCORS: true },
+    jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait' }
+  };
+
+  html2pdf().set(opt).from(element).save().then(() => {
+    // Restore normal tabs
+    document.querySelectorAll('.v360-section').forEach(s => {
+      s.style.display = '';
+    });
+    document.getElementById('pdf-title-only').style.display = 'none';
+    
+    // Switch back to the currently active tab
+    document.querySelector('.v360-tab.active').click();
+  });
+}
+
 </script>
 </body>
 </html>
