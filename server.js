@@ -128,11 +128,14 @@ app.post("/api/data", async (req, res) => {
     let mergedData = newData;
     let isUpdate = false;
     let changes = null;
+    const now = new Date().toISOString();
     
     if (existingRecords && existingRecords.length > 0) {
       const oldData = existingRecords[0].data;
       mergedData = { ...oldData, ...newData };
       isUpdate = true;
+      
+      let modifiedFields = oldData._modifiedFields || {};
       
       // Calculate what changed
       changes = {};
@@ -142,9 +145,21 @@ app.post("/api/data", async (req, res) => {
           // If the field is just being set from empty to empty, ignore it
           if (!oldData[key] && !newData[key]) continue; 
           changes[key] = { old: oldData[key] || "—", new: newData[key] || "—" };
+          modifiedFields[key] = now;
         }
       }
+      
+      mergedData._modifiedFields = modifiedFields;
+      
       if (Object.keys(changes).length === 0) changes = null;
+    } else {
+      let modifiedFields = {};
+      for (const key in newData) {
+        if (key !== "Opportunity Name" && newData[key]) {
+          modifiedFields[key] = now;
+        }
+      }
+      mergedData._modifiedFields = modifiedFields;
     }
 
     // Upsert (Update or Insert)
