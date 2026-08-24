@@ -14,6 +14,8 @@
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <!-- html2pdf.js -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+<!-- SheetJS with Styles (xlsx-js-style) -->
+<script src="https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.bundle.js"></script>
 
 <style>
   :root {
@@ -332,6 +334,10 @@
           <div id="oppSuggestions" class="suggestions-box"></div>
         </div>
         <div class="form-group">
+          <label>Opportunity Owner</label>
+          <input type="text" id="oppOwner" placeholder="e.g. John Doe">
+        </div>
+        <div class="form-group">
           <label>Last Received Response from KAM</label>
           <textarea id="oppKam" rows="2" style="width:100%; box-sizing:border-box; border:1px solid var(--border-color); border-radius:4px; padding:8px; font-family:inherit; font-size:11px; resize:vertical;"></textarea>
         </div>
@@ -442,7 +448,11 @@
       <div class="header-left">
         <h1 class="title">RENEWAL MANAGEMENT DASHBOARD</h1>
       </div>
-      <div class="header-right">
+      <div class="header-right" style="display: flex; gap: 12px; align-items: center;">
+        <button class="btn-sm" onclick="downloadExcel()" style="background: var(--success); color: white; display:flex; align-items:center; gap:6px; border: none; padding: 6px 12px; font-weight: 600; border-radius: 4px; cursor: pointer;">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+          Download as Excel
+        </button>
         <button class="btn-outline btn-sm" onclick="openLogPanel()" style="display:flex; align-items:center; gap:6px;">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
           Activity Log
@@ -569,6 +579,7 @@
         </div>
 
         <div class="filters-grid">
+          <div class="filter-group"><label>Owner</label><select id="owner"></select></div>
           <div class="filter-group"><label>Region</label><select id="region"></select></div>
           <div class="filter-group"><label>Group</label><select id="group"></select></div>
           <div class="filter-group"><label>Category</label><select id="category"></select></div>
@@ -602,14 +613,14 @@
 
 <script>
 const C = {
-  opp: "Opportunity Name", response: "Last Received Response from KAM",
+  owner: "Opportunity Owner", opp: "Opportunity Name", response: "Last Received Response from KAM",
   region: "Sub-Region", group: "Group", category: "Category",
   forecast: "Forecast Category", timeline: "Renewal Timeline",
   start: "Service Start Date", end: "Service End Date",
   acv: "Forecast ACV Amount", tcv: "TCV Amount",
   revenue: "2026 Revenue Estimate till Sep 2026, Including Catchup if any"
 };
-const columns = [C.opp, C.response, C.region, C.group, C.category, C.forecast, C.timeline, C.start, C.end, C.acv, C.tcv, C.revenue];
+const columns = [C.owner, C.opp, C.response, C.region, C.group, C.category, C.forecast, C.timeline, C.start, C.end, C.acv, C.tcv, C.revenue];
 
 let allRows = [];
 let rows = [];
@@ -697,7 +708,7 @@ function forecastBadge(value) {
 }
 
 function clearAllFilters() {
-  ["region", "group", "category", "forecast", "timeline", "search"].forEach(id => $(id).value = "");
+  ["owner", "region", "group", "category", "forecast", "timeline", "search"].forEach(id => $(id).value = "");
   sortColumn = null; sortDirection = 1;
   specialFilter = null;
   $("specialFilterBanner").style.display = "none";
@@ -716,13 +727,14 @@ function applyFilters() {
   isFiltering = true;
 
   const filters = {
-    region: $("region").value, group: $("group").value, category: $("category").value,
+    owner: $("owner").value, region: $("region").value, group: $("group").value, category: $("category").value,
     forecast: $("forecast").value, timeline: $("timeline").value
   };
   const q = $("search").value.trim().toLowerCase();
 
   rows = allRows.filter(r => {
     if (!matchesSpecialFilter(r)) return false;
+    if (filters.owner && r[C.owner] !== filters.owner) return false;
     if (filters.region && r[C.region] !== filters.region) return false;
     
     if (filters.group) {
@@ -741,14 +753,14 @@ function applyFilters() {
   });
 
   // Cascading update
-  ["region", "group", "category", "forecast", "timeline"].forEach(id => {
-    const field = {region: C.region, group: C.group, category: C.category, forecast: C.forecast, timeline: C.timeline}[id];
+  ["owner", "region", "group", "category", "forecast", "timeline"].forEach(id => {
+    const field = {owner: C.owner, region: C.region, group: C.group, category: C.category, forecast: C.forecast, timeline: C.timeline}[id];
     const select = $(id);
     const currentVal = filters[id];
     
     const validRows = allRows.filter(r => {
       if (!matchesSpecialFilter(r)) return false;
-      return ["region", "group", "category", "forecast", "timeline"].every(otherId => {
+      return ["owner", "region", "group", "category", "forecast", "timeline"].every(otherId => {
         if (otherId === id) return true; 
         const v = filters[otherId];
         if (!v) return true;
@@ -757,7 +769,7 @@ function applyFilters() {
           return hasKamComment(r);
         }
         
-        const otherField = {region: C.region, group: C.group, category: C.category, forecast: C.forecast, timeline: C.timeline}[otherId];
+        const otherField = {owner: C.owner, region: C.region, group: C.group, category: C.category, forecast: C.forecast, timeline: C.timeline}[otherId];
         return r[otherField] === v;
       });
     });
@@ -782,6 +794,7 @@ function applyFilters() {
   // Apply filters one last time after cascading logic
   rows = allRows.filter(r => {
     if (!matchesSpecialFilter(r)) return false;
+    if (filters.owner && r[C.owner] !== filters.owner) return false;
     if (filters.region && r[C.region] !== filters.region) return false;
     
     if (filters.group) {
@@ -873,6 +886,7 @@ function renderTable() {
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"></path><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path></svg>
         </button>
       </td>
+      <td>${esc(r[C.owner] || "—")}</td>
       <td><strong>${esc(r[C.opp])}</strong></td>
       <td><div style="max-width: 150px; white-space: normal; overflow: hidden;" title="${esc(r[C.response] || "")}">${esc(r[C.response] || "—")}</div></td>
       <td>${esc(r[C.region])}</td>
@@ -1142,6 +1156,7 @@ function selectOpp(oppName) {
   document.getElementById('oppSuggestions').style.display = 'none';
   
   // Auto-fill form
+  document.getElementById('oppOwner').value = row[C.owner] || '';
   document.getElementById('oppKam').value = row[C.response] || '';
   document.getElementById('oppRegion').value = row[C.region] || '';
   document.getElementById('oppGroup').value = row[C.group] || '';
@@ -1173,6 +1188,7 @@ async function submitOpp(event) {
   event.preventDefault();
   
   const oppName = document.getElementById("oppName").value.trim();
+  const oppOwner = document.getElementById("oppOwner").value.trim();
   const kamResponse = document.getElementById("oppKam").value.trim();
   const region = document.getElementById("oppRegion").value.trim();
   const group = document.getElementById("oppGroup").value.trim();
@@ -1184,6 +1200,7 @@ async function submitOpp(event) {
   // We only send fields that are actually filled in, so we don't accidentally overwrite existing data with blanks on an update.
   const newData = { "Opportunity Name": oppName };
   
+  if (oppOwner) newData["Opportunity Owner"] = oppOwner;
   if (kamResponse) {
     newData["Last Received Response from KAM"] = kamResponse;
     newData["Group"] = "KAM Comments"; // Automatically update group so it reflects in the KPI and filters
@@ -1238,7 +1255,7 @@ async function loadExcelData() {
   }
 }
 
-["region", "group", "category", "forecast", "timeline"].forEach(id => $(id).addEventListener("change", applyFilters));
+["owner", "region", "group", "category", "forecast", "timeline"].forEach(id => $(id).addEventListener("change", applyFilters));
 $("search").addEventListener("input", applyFilters);
 $("clear").onclick = clearAllFilters;
 
@@ -1605,6 +1622,64 @@ function setupSSE() {
 setupSSE();
 setInterval(loadExcelData, 60 * 1000);
 loadExcelData();
+
+function downloadExcel() {
+  if (!allRows || allRows.length === 0) {
+    showToast("No data available to download.", "error");
+    return;
+  }
+  
+  if (typeof XLSX === "undefined") {
+    showToast("Excel library is still loading. Please try again.", "error");
+    return;
+  }
+  
+  const dataToExport = (rows && rows.length > 0) ? rows : allRows;
+  
+  const exportData = dataToExport.map(r => {
+    let obj = {};
+    columns.forEach(col => {
+      obj[col] = r[col] || "";
+    });
+    return obj;
+  });
+  
+  const worksheet = XLSX.utils.json_to_sheet(exportData);
+  
+  // Highlight cells changed in the last 7 days
+  const sevenDaysAgo = new Date();
+  sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+  
+  dataToExport.forEach((r, rowIndex) => {
+    const modFields = r._modifiedFields || {};
+    columns.forEach((col, colIndex) => {
+      const modDateStr = modFields[col];
+      if (modDateStr) {
+        const modDate = new Date(modDateStr);
+        if (modDate >= sevenDaysAgo) {
+          const cellAddress = XLSX.utils.encode_cell({ r: rowIndex + 1, c: colIndex });
+          if (worksheet[cellAddress]) {
+            worksheet[cellAddress].s = {
+              fill: {
+                patternType: "solid",
+                fgColor: { rgb: "FFFFFF00" }
+              }
+            };
+          }
+        }
+      }
+    });
+  });
+
+  const workbook = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(workbook, worksheet, "Opportunities");
+  
+  const wscols = columns.map(() => ({wch: 22}));
+  worksheet['!cols'] = wscols;
+  
+  XLSX.writeFile(workbook, "Renewal_Opportunities.xlsx");
+  showToast("Excel downloaded successfully!", "success");
+}
 
 // --- 360 View Logic ---
 let current360Opp = null;
